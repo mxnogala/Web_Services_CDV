@@ -9,10 +9,13 @@ const fs = require('fs');
 const { nextTick } = require('process');
 var jwt = require('jsonwebtoken');
 var stored_data=[];
+var cors = require('cors')
+app.use(cors())
 app.use(bodyParser.urlencoded({extended: true})) ;
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded());
 app.use(helmet());
+
 
 app.get('/', (req, res)=> {
     res.send('Hello World!')
@@ -40,17 +43,17 @@ app.get('/info', (req,res)=> {
 
 //2
 app.get('/hello/:name', (req,res)=> {
-    var name=req.params.name;
-    let schema=yup.string().max(10).matches(/^[a-zA-Z]+$/);
+    let name=req.params.name;
+    let schema=yup.string().max(10).matches(/^[a-zA-Z]+\s*$/);
     if (schema.isValidSync(name))
     {
         res.status(200);
-        res.send('Hello '+name+'!');
+        res.send('Hello '+name+"!");
     }
     else 
     {
         res.status(400);
-        res.send('Podane dane nie są poprawne.');
+        res.send('Name is not valid');
     }
 })
 
@@ -68,7 +71,11 @@ app.post('/parse', (req,res)=>{
     var toJson="{\"";
     var isOpen=false;
     form.parse(req,(err,fields, files)=> {
-        
+        if (err) 
+        {
+            res.send(500);
+            res.status(500);
+        };
         var path=files.toParse.path;
         console.log(path);
         fs.readFile(path, (err, data) => {
@@ -111,6 +118,7 @@ app.post('/parse', (req,res)=>{
                }
             toJson+="}";
             toJson.trim();
+            
       
            console.log(toJson);
             res.json(JSON.parse(toJson));
@@ -121,45 +129,53 @@ app.post('/parse', (req,res)=>{
 
   //5
 app.get('/login', (req,res)=>{
-    var login='login';
-    var password='hasło';
-    var token=jwt.sign({secret:'testSecret', login}, 'tokenInfo');
-
-    if (req.body.login!=login || req.body.password!=password)
+    
+    const consts=require('./consts');
+    const log=consts.LOGIN; 
+    const pass=consts.PASSWORD; 
+    console.log(req.body.login);
+    console.log(req.body.password);
+    console.log(log);
+    console.log(pass); 
+    if (req.query.login!=log || req.query.password!=pass)
     {
         res.status(401);
-        res.send("Niepoprawne dane."); 
+        res.send("Niepoprawne dane"); 
     }
     else {
-    res.send(token);
-    var decoded=jwt.verify(token, 'tokenInfo');
-    console.log(decoded);
+        var token=jwt.sign({log}, consts.PRIVATE_KEY)
+        res.send(token);
+
     }
 })
 
 
 //6
-app.get('/profile', (req,res)=> {
-
-    let token = req.headers.authorization;
-    token=token.slice(7);
-    var decoded=jwt.decode(token);
-    var login="test";
-    if (decoded.login==login)
+app.get('/profile', (req,res) =>{
+    const consts = require('./consts');
+    
+    if (req.headers.authorization!=null)
     {
-        res.json({"login":decoded.login});
+        var token = req.headers.authorization;
+        token = token.slice(7);
+        jwt.verify(token, consts.PRIVATE_KEY, function (err, decoded) 
+        {
+            if (err)
+            {
+                res.status(401);
+                res.send("Niepoprawny token");
+            }    
+            else 
+            {
+                res.status(200);
+                res.json({ login: decoded.login });
+            }
+        } )
     }
-    else {
-        res.status(401);
-        res.send("Niepoprawny token.");
-        }
-    
-    
-})
+    else 
+    {
+        res.status(500);
+        res.send("Brak tokena");
+    }
+  });
 
-
-// app.use(function(req,res) {
-//     res.setHeader('Content-Type', 'text/plain');
-//     res.write('you posted: \n');
-//     res.end(JSON.stringify(req.body, null,2)) ;
-// })
